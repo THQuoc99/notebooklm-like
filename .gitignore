@@ -1,0 +1,6 @@
+# Chặn thư mục môi trường ảo của frontend và backend
+frontend/venv/
+backend/venv/
+
+# Chặn file cấu hình nhạy cảm của backend
+backend/.env
