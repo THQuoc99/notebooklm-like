@@ -1,9 +1,10 @@
 import re
 from typing import List, Tuple, Optional
 from app.config import settings
+import logging
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-
+logger = logging.getLogger(__name__)
 class TextChunker:
     def __init__(self, chunk_size: int = None, overlap: int = None):
         self.chunk_size = chunk_size or settings.CHUNK_SIZE
@@ -37,11 +38,20 @@ class TextChunker:
         Chunk text using LangChain's RecursiveCharacterTextSplitter.
         Returns: List of (content, title, page_start, page_end) tuples
         """
+        # Skip empty or whitespace-only text
+        if not text or not text.strip():
+            logger.warning(f"Page {page_num}: Empty or whitespace-only text, skipping")
+            return []
+        
         # Detect title from beginning of text
         title = self.detect_heading(text)
         
         # Split text into chunks using LangChain
         chunks_text = self.text_splitter.split_text(text)
+        
+        if not chunks_text:
+            logger.warning(f"Page {page_num}: No chunks created from {len(text)} chars")
+            return []
         
         # Format as tuples with metadata
         chunks = []
@@ -50,6 +60,7 @@ class TextChunker:
             chunk_title = self.detect_heading(chunk_content) or title
             chunks.append((chunk_content, chunk_title, page_num, page_num))
         
+        logger.info(f"Page {page_num}: Created {len(chunks)} chunks from {len(text)} chars")
         return chunks
     
     def chunk_document(self, pages: List[Tuple[int, str]]) -> List[Tuple[str, Optional[str], int, int]]:

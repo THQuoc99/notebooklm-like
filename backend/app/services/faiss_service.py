@@ -125,15 +125,37 @@ class FAISSService:
         return ids.tolist()
 
     def search(
-        self, query_vector: List[float], k: int = 5
+        self, query_vector: List[float], k: int = 5, file_ids: List[str] = None
     ) -> Tuple[List[int], List[float]]:
+        """Search for similar vectors.
+        
+        Args:
+            query_vector: Query embedding vector
+            k: Number of results to return
+            file_ids: Optional list of file_ids to filter results (scoped retrieval)
+        
+        Returns:
+            Tuple of (indices, scores)
+        """
         query_np = np.array([query_vector], dtype="float32")
         faiss.normalize_L2(query_np)
 
         with self.lock:
-            scores, indices = self.index.search(query_np, k)
+            # If file filtering requested, search more and filter in Python
+            # (FAISS doesn't support metadata filtering natively with IndexIDMap2)
+            search_k = k * 10 if file_ids else k
+            scores, indices = self.index.search(query_np, search_k)
 
-        return indices[0].tolist(), scores[0].tolist()
+        result_indices = indices[0].tolist()
+        result_scores = scores[0].tolist()
+        
+        # Filter by file_ids if provided (post-filtering)
+        if file_ids:
+            # This requires MongoDB lookup - delegate to caller
+            # Return more results so caller can filter
+            pass
+        
+        return result_indices, result_scores
 
     def remove_ids(self, ids: List[int]) -> int:
         """Remove vectors by IDs. Returns number removed."""

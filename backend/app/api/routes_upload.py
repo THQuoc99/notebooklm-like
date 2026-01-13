@@ -92,7 +92,8 @@ async def upload_file(file: UploadFile = File(...)):
             )
             chunk_models.append(chunk_model.dict())
         
-        chunks_col.insert_many(chunk_models)
+        if chunk_models:
+            chunks_col.insert_many(chunk_models)
         
         # Save FAISS index
         faiss_service.save()
@@ -192,23 +193,37 @@ def process_file_background(file_id: str, temp_path: str, filename: str, file_ty
             )
             chunk_models.append(chunk_model.dict())
         
-        logger.info(f"Saving {len(chunk_models)} chunks to MongoDB")
-        chunks_col.insert_many(chunk_models)
-        
-        # Save FAISS index
-        logger.info("Saving FAISS index")
-        faiss_service.save()
-        
-        # Update status to indexed
-        files_col.update_one(
-            {"file_id": file_id},
-            {"$set": {"status": "indexed", "chunks_count": len(chunk_models)}}
-        )
-        
-        logger.info(f"File {filename} processed successfully: {len(chunk_models)} chunks")
+        # Save chunks to MongoDB (only if there are chunks)
+        if chunk_models:
+            logger.info(f"Saving {len(chunk_models)} chunks to MongoDB")
+            chunks_col.insert_many(chunk_models)
+            
+            # Save FAISS index
+            logger.info("Saving FAISS index")
+            faiss_service.save()
+            
+            # Update status to indexed
+            files_col.update_one(
+                {"file_id": file_id},
+                {"$set": {"status": "indexed", "chunks_count": len(chunk_models)}}
+            )
+            
+            logger.info(f"File {filename} processed successfully: {len(chunk_models)} chunks")
+        else:
+            # No chunks extracted - mark as failed
+            logger.warning(f"No chunks extracted from {filename}. Marking as failed.")
+            files_col.update_one(
+                {"file_id": file_id},
+                {"$set": {
+                    "status": "failed", 
+                    "error": "No text content extracted. File may be empty or corrupted.",
+                    "chunks_count": 0
+                }}
+            )
         
         # Clean up temp file
-        os.unlink(temp_path)
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
         
     except Exception as e:
         logger.error(f"Error processing file {filename}: {str(e)}", exc_info=True)
@@ -250,7 +265,8 @@ async def upload_files_batch(files: List[UploadFile] = File(...), background_tas
                 s3_path=s3_path,
                 size=len(content),
                 status="processing",
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
+                total_page=0  # Will be updated after processing
             )
             files_col.insert_one(file_model.dict())
             

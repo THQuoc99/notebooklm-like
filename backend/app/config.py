@@ -20,6 +20,8 @@ class Settings:
     AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
     AWS_REGION: str = os.getenv("AWS_REGION", "ap-southeast-2")
     AWS_S3_BUCKET: str = os.getenv("AWS_S3_BUCKET", "")
+    # Poppler
+    POPPLER_PATH: str = os.getenv("POPPLER_PATH", "")
     
     # FAISS
     # Prefer environment override. If not set, use a path relative to the backend folder.
@@ -33,11 +35,11 @@ class Settings:
     FAISS_INDEX_TYPE: str = "IVF_FLAT"
     
     # Chunking
-    CHUNK_SIZE: int = 400  # tokens
+    CHUNK_SIZE: int = 300  # tokens (reduced for free API limit)
     CHUNK_OVERLAP: int = 50  # tokens
     
     # RAG
-    TOP_K: int = 5
-    MAX_HISTORY: int = 5
+    TOP_K: int = 3  # reduced from 5 to fit 4096 token limit
+    MAX_HISTORY: int = 3  # reduced from 5 to fit 4096 token limit
 
 settings = Settings()

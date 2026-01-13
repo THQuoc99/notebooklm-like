@@ -15,16 +15,17 @@ class LLMService:
     def build_rag_prompt(self, question: str, contexts: List[dict], history: List[MessageModel] = None) -> List[dict]:
         """
         Build RAG prompt with context and history.
-        contexts: List of {content, title, page_start, page_end, filename}
+        contexts: List of {content, title, page_start, page_end, filename, citation_number}
         """
-        # Build context string with sensible page-range formatting
+        # Build context string with citation numbers
         context_parts: List[str] = []
         for ctx in contexts:
+            citation_num = ctx.get('citation_number', '?')
             filename = ctx.get('filename', 'Unknown')
             page_start = ctx.get('page_start')
             page_end = ctx.get('page_end')
 
-            # Format page label: if start==end or end missing, show single page
+            # Format page label
             if page_start is None and page_end is None:
                 page_label = ""
             elif page_end is None or str(page_start) == str(page_end):
@@ -32,10 +33,10 @@ class LLMService:
             else:
                 page_label = f"Trang {page_start}-{page_end}"
 
-            header = f"[Nguồn: {filename}"
+            header = f"[{citation_num}] Nguồn: {filename}"
             if page_label:
                 header += f" - {page_label}"
-            header += "]\n"
+            header += "\n"
 
             title = ctx.get('title', 'N/A')
             content = ctx.get('content', '')
@@ -43,14 +44,12 @@ class LLMService:
 
         context_str = "\n\n".join(context_parts)
         
-        system_prompt = """Bạn là trợ lý AI thông minh, nhiệm vụ của bạn là trả lời câu hỏi dựa trên tài liệu được cung cấp.
-
-NGUYÊN TẮC:
-- Chỉ trả lời dựa trên thông tin trong tài liệu
-- Nếu không tìm thấy thông tin, nói rõ "Tôi không tìm thấy thông tin này trong tài liệu"
-- Trích dẫn nguồn (tên file và số trang) khi trả lời
-- Trả lời ngắn gọn, súc tích
-- Không bịa đặt thông tin"""
+        system_prompt = """Trợ lý AI trả lời dựa trên tài liệu.
+Quy tắc:
+- Chỉ dùng thông tin trong tài liệu
+- Trích dẫn bằng [1], [2], [3]
+- Không biết → nói "Không tìm thấy trong tài liệu"
+- Ngắn gọn, chính xác"""
 
         messages = [{"role": "system", "content": system_prompt}]
         
@@ -63,7 +62,7 @@ NGUYÊN TẮC:
                 })
         
         # Add current question with context
-        user_message = f"""Tài liệu tham khảo:
+        user_message = f"""Tài liệu:
 {context_str}
 
 Câu hỏi: {question}"""

@@ -15,11 +15,17 @@ class WebSocketClient:
         self.ws.settimeout(5)  # Shorter timeout for faster updates
         self.ws.connect(self.url)
     
-    def send_question(self, question: str):
-        """Send question to server."""
+    def send(self, message: str):
+        """Send raw message to server."""
+        self.ws.send(message)
+    
+    def send_question(self, question: str, file_ids: list = None):
+        """Send question to server with optional file_ids."""
         message = {
             "question": question
         }
+        if file_ids:
+            message["file_ids"] = file_ids
         self.ws.send(json.dumps(message))
     
     def receive_stream(self) -> Generator[dict, None, None]:

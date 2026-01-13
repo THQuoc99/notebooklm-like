@@ -3,6 +3,7 @@ from pymongo import MongoClient
 import json
 import uuid
 from datetime import datetime
+from typing import Optional, List
 
 from app.config import settings
 from app.models.pydantic_models import MessageModel, SourceModel
@@ -10,6 +11,7 @@ from app.services.embedding import embedding_service
 from app.services.faiss_service import faiss_service
 from app.services.llm_service import llm_service
 from app.services.conversation import conversation_service
+from app.services.rag_service import rag_service
 
 router = APIRouter()
 
@@ -22,7 +24,7 @@ files_col = db['files']
 
 @router.websocket("/ws/chat/{conversation_id}")
 async def websocket_chat(websocket: WebSocket, conversation_id: str):
-    """WebSocket endpoint for real-time chat."""
+    """WebSocket endpoint for real-time chat with source citations."""
     await websocket.accept()
     
     try:
@@ -31,6 +33,7 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
             data = await websocket.receive_text()
             message_data = json.loads(data)
             question = message_data.get("question", "")
+            file_ids = message_data.get("file_ids")  # Optional: scoped retrieval
             
             if not question:
                 await websocket.send_json({"type": "error", "content": "Empty question"})
@@ -39,49 +42,28 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
             # Get conversation history
             history = conversation_service.get_history(conversation_id, limit=settings.MAX_HISTORY)
             
-            # Embed question
-            question_embedding = embedding_service.embed_text(question)
-            question_vector = embedding_service.normalize_vector(question_embedding)
-
-            # If embedding failed or is empty, return error to client
-            if question_vector.size == 0:
-                await websocket.send_json({"type": "error", "content": "Embedding failed or empty"})
+            # Retrieve contexts with scoped retrieval support
+            contexts, sources = rag_service.retrieve_contexts(
+                question=question,
+                top_k=settings.TOP_K,
+                file_ids=file_ids  # Can be None for all files, or list of file_ids
+            )
+            
+            if not contexts:
+                await websocket.send_json({
+                    "type": "info", 
+                    "content": "Không tìm thấy thông tin liên quan trong tài liệu"
+                })
                 continue
-
-            # Search FAISS
-            indices, scores = faiss_service.search(question_vector.tolist(), k=settings.TOP_K)
-
-            # Guard if search returns empty
-            if not indices or not scores:
-                await websocket.send_json({"type": "info", "content": "No relevant contexts found"})
-                indices, scores = [], []
             
-            # Get chunks from MongoDB
-            contexts = []
-            sources = []
+            # Format contexts with citation numbers [1], [2], etc.
+            contexts_with_citations, citation_map = rag_service.format_contexts_with_citations(contexts)
             
-            for idx, score in zip(indices, scores):
-                chunk = chunks_col.find_one({"faiss_index_id": int(idx)})
-                if chunk:
-                    # Get file info
-                    file_doc = files_col.find_one({"file_id": chunk['file_id']})
-                    filename = file_doc['filename'] if file_doc else "Unknown"
-                    
-                    contexts.append({
-                        "content": chunk['content'],
-                        "title": chunk.get('title'),
-                        "page_start": chunk['page_start'],
-                        "page_end": chunk['page_end'],
-                        "filename": filename
-                    })
-                    
-                    sources.append(SourceModel(
-                        file_id=chunk['file_id'],
-                        chunk_id=chunk['chunk_id'],
-                        page_start=chunk['page_start'],
-                        page_end=chunk['page_end'],
-                        filename=filename
-                    ))
+            # Send citation map to client first
+            await websocket.send_json({
+                "type": "citations",
+                "content": citation_map
+            })
             
             # Save user message
             user_msg = MessageModel(
@@ -91,9 +73,9 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
             )
             conversation_service.add_message(conversation_id, user_msg)
             
-            # Stream answer
+            # Stream answer with citations
             full_answer = ""
-            async for chunk in llm_service.answer_question_stream(question, contexts, history):
+            async for chunk in llm_service.answer_question_stream(question, contexts_with_citations, history):
                 await websocket.send_json(chunk)
                 if chunk["type"] == "token":
                     full_answer += chunk["content"]
@@ -107,11 +89,17 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
             )
             conversation_service.add_message(conversation_id, assistant_msg)
             
-            # Send sources
+            # Send sources detail for hover tooltips
             await websocket.send_json({
                 "type": "sources",
                 "content": [s.dict() for s in sources]
             })
+            
+    except WebSocketDisconnect:
+        print(f"Client disconnected from conversation {conversation_id}")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        await websocket.send_json({"type": "error", "content": str(e)})
             
     except WebSocketDisconnect:
         print(f"Client disconnected from conversation {conversation_id}")

@@ -11,7 +11,7 @@ class FileModel(BaseModel):
     size: int
     status: str  # uploaded | processing | indexed | failed
     created_at: datetime
-    total_page:int
+    total_page: int = 0  # Default to 0, updated after processing
 
 # chunks collection
 class ChunkModel(BaseModel):
@@ -32,6 +32,8 @@ class SourceModel(BaseModel):
     page_start: int
     page_end: int
     filename: Optional[str] = None
+    title: Optional[str] = None
+    content: Optional[str] = None  # For hover tooltip display
 
 class MessageModel(BaseModel):
     role: str  # user | assistant

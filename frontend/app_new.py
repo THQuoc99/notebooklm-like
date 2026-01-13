@@ -20,6 +20,9 @@ if "messages" not in st.session_state:
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = []
 
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
 if "uploaded_files_tracker" not in st.session_state:
     st.session_state.uploaded_files_tracker = set()
 
@@ -49,101 +52,6 @@ st.markdown("""
     
     .stCheckbox {
         padding: 4px 0;
-    }
-    
-    /* Hover citation styling */
-    .citation {
-        display: inline-block;
-        background: #e3f2fd;
-        color: #1976d2;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-weight: 600;
-        cursor: help;
-        position: relative;
-        margin: 0 2px;
-        transition: all 0.2s;
-    }
-    
-    .citation:hover {
-        background: #1976d2;
-        color: white;
-        transform: translateY(-1px);
-    }
-    
-    .citation .tooltip {
-        visibility: hidden;
-        opacity: 0;
-        position: absolute;
-        bottom: 130%;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: #2c3e50;
-        color: #fff;
-        padding: 16px;
-        border-radius: 8px;
-        width: 350px;
-        max-width: 90vw;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 1000;
-        transition: opacity 0.3s;
-        text-align: left;
-        font-weight: normal;
-        font-size: 13px;
-        line-height: 1.5;
-    }
-    
-    .citation:hover .tooltip {
-        visibility: visible;
-        opacity: 1;
-    }
-    
-    .tooltip::after {
-        content: "";
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        margin-left: -6px;
-        border-width: 6px;
-        border-style: solid;
-        border-color: #2c3e50 transparent transparent transparent;
-    }
-    
-    .tooltip-header {
-        font-weight: 700;
-        color: #3498db;
-        margin-bottom: 8px;
-        font-size: 14px;
-        border-bottom: 1px solid #555;
-        padding-bottom: 6px;
-    }
-    
-    .tooltip-section {
-        margin: 8px 0;
-    }
-    
-    .tooltip-label {
-        color: #95a5a6;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 3px;
-    }
-    
-    .tooltip-content {
-        color: #ecf0f1;
-        margin-bottom: 6px;
-    }
-    
-    .tooltip-excerpt {
-        background: #34495e;
-        padding: 8px;
-        border-radius: 4px;
-        font-style: italic;
-        color: #bdc3c7;
-        max-height: 100px;
-        overflow-y: auto;
-        font-size: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -182,72 +90,23 @@ def get_files():
     return []
 
 def render_answer_with_citations(answer_text, sources):
-    """Render answer with citation references and hover tooltips."""
-    # Convert [1], [2], [3] to HTML with hover tooltips
-    def create_citation_html(match):
-        num = match.group(1)
-        idx = int(num) - 1
-        
-        if idx < 0 or idx >= len(sources):
-            return match.group(0)
-        
-        source = sources[idx]
-        filename = source.get('filename', 'Unknown')
-        page_start = source.get('page_start', '?')
-        page_end = source.get('page_end', '?')
-        chunk_text = source.get('content', 'N/A')[:200] + "..."
-        title = source.get('title', 'N/A')
-        
-        if page_start == page_end:
-            page_label = f"Trang {page_start}"
-        else:
-            page_label = f"Trang {page_start}-{page_end}"
-        
-        tooltip_html = f"""
-        <div class="tooltip">
-            <div class="tooltip-header">📄 Nguồn [{num}]</div>
-            <div class="tooltip-section">
-                <div class="tooltip-label">Tên file</div>
-                <div class="tooltip-content">{filename}</div>
-            </div>
-            <div class="tooltip-section">
-                <div class="tooltip-label">Số trang</div>
-                <div class="tooltip-content">{page_label}</div>
-            </div>
-            <div class="tooltip-section">
-                <div class="tooltip-label">Tiêu đề đoạn</div>
-                <div class="tooltip-content">{title}</div>
-            </div>
-            <div class="tooltip-section">
-                <div class="tooltip-label">Trích đoạn</div>
-                <div class="tooltip-excerpt">{chunk_text}</div>
-            </div>
-        </div>
-        """
-        
-        return f'<span class="citation">[{num}]{tooltip_html}</span>'
+    """Render answer with citation references."""
+    st.markdown(answer_text)
     
-    # Replace [1], [2], [3], etc. with citation HTML
-    pattern = r'\[(\d+)\]'
-    answer_html = re.sub(pattern, create_citation_html, answer_text)
-    
-    # Render HTML
-    st.markdown(answer_html, unsafe_allow_html=True)
-    
-    # Original source list below (collapsed by default)
     if sources:
-        with st.expander("📚 Danh sách nguồn đầy đủ", expanded=False):
-            for i, source in enumerate(sources):
-                filename = source.get('filename', 'Unknown')
-                page_start = source.get('page_start', '?')
-                page_end = source.get('page_end', '?')
-                
-                if page_start == page_end:
-                    page_label = f"Trang {page_start}"
-                else:
-                    page_label = f"Trang {page_start}-{page_end}"
-                
-                st.caption(f"[{i+1}] 📄 {filename} - {page_label}")
+        st.markdown("---")
+        st.markdown("**📚 Nguồn tham khảo:**")
+        for i, source in enumerate(sources):
+            filename = source.get('filename', 'Unknown')
+            page_start = source.get('page_start', '?')
+            page_end = source.get('page_end', '?')
+            
+            if page_start == page_end:
+                page_label = f"Trang {page_start}"
+            else:
+                page_label = f"Trang {page_start}-{page_end}"
+            
+            st.caption(f"[{i+1}] 📄 {filename} - {page_label}")
 
 # Sidebar - File Management
 with st.sidebar:
@@ -283,12 +142,18 @@ with st.sidebar:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🔄 Refresh", use_container_width=True):
+            st.session_state.last_refresh = time.time()
             st.rerun()
     with col2:
         if st.button("🗑️ Clear", use_container_width=True):
             st.session_state.uploaded_files_tracker.clear()
             st.session_state.selected_files.clear()
             st.rerun()
+    
+    # Auto refresh every 10 seconds
+    if time.time() - st.session_state.last_refresh > 10:
+        st.session_state.last_refresh = time.time()
+        st.rerun()
     
     # Get and display files
     files = get_files()
@@ -386,24 +251,23 @@ if prompt := st.chat_input("Đặt câu hỏi về tài liệu..."):
             src_placeholder = st.empty()
             
             try:
-                ws_client = WebSocketClient(
-                    f"ws://localhost:8000/ws/chat/{st.session_state.conversation_id}"
-                )
-                ws_client.connect()
-                
-                full_answer = ""
-                sources = []
-                
-                # Use send() method with JSON payload
                 ws_message = {"question": prompt}
                 if st.session_state.selected_files:
                     ws_message["file_ids"] = st.session_state.selected_files
                 
+                ws_client = WebSocketClient(
+                    f"ws://localhost:8000/ws/chat/{st.session_state.conversation_id}"
+                )
+                
+                full_answer = ""
+                sources = []
+                
                 ws_client.send(json.dumps(ws_message))
                 
-                for response in ws_client.receive_stream():
-                    msg_type = response.get("type")
-                    content = response.get("content")
+                for response in ws_client.receive():
+                    data = json.loads(response)
+                    msg_type = data.get("type")
+                    content = data.get("content")
                     
                     if msg_type == "citations":
                         st.caption("📚 Nguồn:")

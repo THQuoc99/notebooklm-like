@@ -206,7 +206,6 @@ Auto refresh để luôn đồng bộ. Không cần phải nhấn nút refresh
 
 ## Chức năng hover hiển thị thêm thông tin
 
-
 # Chức năng Hover hiển thị thông tin nguồn (Source Hover Preview)
 
 ## 1. Mục tiêu chức năng
@@ -240,7 +239,7 @@ Ví dụ:
 Trong đó:
 
 * `[1]`, `[2]` là **Source Index**
-* Mỗi index ánh xạ tới **1 chunk tài liệu cụ thể**
+* Mỗi index ánh xạ tới **1 chunk tài liệu cụ thể khi hover vào**
 
 ---
 
@@ -269,7 +268,6 @@ Ví dụ hiển thị:
 
 </span><span>Tr</span><span>í</span><span>ch</span><span> đ</span><span>o</span><span>ạ</span><span>n</span><span>:</span><span>
 </span><span>"The Transformer is a novel neural network architecture based solely on attention mechanisms..."</span></span></code></div></div></pre>
-
 
 ---
 
