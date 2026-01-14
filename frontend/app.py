@@ -20,8 +20,11 @@ if "messages" not in st.session_state:
 if "selected_files" not in st.session_state:
     st.session_state.selected_files = []
 
-if "uploaded_files_tracker" not in st.session_state:
-    st.session_state.uploaded_files_tracker = set()
+if "deleting_files" not in st.session_state:
+    st.session_state.deleting_files = set()
+
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 # Page config
 st.set_page_config(
@@ -153,23 +156,18 @@ st.title("📚 NotebookLM-like Demo")
 st.markdown("Upload tài liệu và hỏi đáp với AI - Powered by RAG + OCR")
 
 # Helper functions
-def auto_upload_file(file):
-    """Auto upload file immediately when selected."""
+def upload_file_parallel(file, file_key):
+    """Upload a single file - runs in thread worker."""
     try:
-        file_key = f"{file.name}_{file.size}"
-        if file_key in st.session_state.uploaded_files_tracker:
-            return {"status": "skipped"}
-        
-        files = [("files", (file.name, file, file.type))]
-        response = requests.post(f"{API_URL}/upload/batch", files=files, timeout=30)
+        files = [("files", (file.name, file.getvalue(), file.type))]
+        response = requests.post(f"{API_URL}/upload/batch", files=files, timeout=60)
         
         if response.status_code == 200:
-            st.session_state.uploaded_files_tracker.add(file_key)
-            return {"status": "success", "data": response.json()}
+            return {"status": "success", "file_key": file_key, "data": response.json()}
         else:
-            return {"status": "error", "message": response.text}
+            return {"status": "error", "file_key": file_key, "message": response.text[:100]}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "file_key": file_key, "message": str(e)[:100]}
 
 def get_files():
     """Fetch files from backend."""
@@ -253,27 +251,66 @@ def render_answer_with_citations(answer_text, sources):
 with st.sidebar:
     st.header("📁 Quản lý Tài liệu")
     
+    # Background cleanup: send DELETE for files marked as deleting (non-blocking)
+    if st.session_state.deleting_files:
+        import threading
+        # Copy file IDs to pass to thread (session_state not accessible in background threads)
+        files_to_delete = list(st.session_state.deleting_files.copy())
+        
+        def cleanup_deleted_files(file_ids):
+            for file_id in file_ids:
+                try:
+                    # Fire and forget - no timeout wait
+                    requests.delete(f"{API_URL}/files/{file_id}", timeout=0.5)
+                except:
+                    pass  # Ignore all errors
+        
+        # Start cleanup thread immediately, don't wait
+        cleanup_thread = threading.Thread(target=cleanup_deleted_files, args=(files_to_delete,), daemon=True)
+        cleanup_thread.start()
+    
     # Auto upload
     st.subheader("Upload File")
     uploaded_files = st.file_uploader(
         "Chọn file (PDF, TXT, DOCX, JPG, PNG)",
         type=["pdf", "txt", "docx", "jpg", "jpeg", "png"],
         accept_multiple_files=True,
-        key="file_uploader",
-        help="✨ File sẽ tự động upload khi bạn chọn"
+        key=f"file_uploader_{st.session_state.uploader_key}",
+        help="✨ Chọn file và upload ngay"
     )
     
-    # Auto upload when files selected
+    # Upload immediately when files selected - no tracking
     if uploaded_files:
-        for file in uploaded_files:
-            file_key = f"{file.name}_{file.size}"
-            if file_key not in st.session_state.uploaded_files_tracker:
-                with st.spinner(f"⏳ Đang upload {file.name}..."):
-                    result = auto_upload_file(file)
-                    if result["status"] == "success":
-                        st.success(f"✅ {file.name}")
-                    elif result["status"] == "error":
-                        st.error(f"❌ {file.name}: {result['message'][:40]}")
+        import concurrent.futures
+        
+        with st.spinner(f"⏳ Đang upload {len(uploaded_files)} file..."):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {executor.submit(upload_file_parallel, file, f"{file.name}_{file.size}"): file 
+                          for file in uploaded_files}
+                
+                success_count = 0
+                error_count = 0
+                
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        result = future.result()
+                        if result.get("status") == "success":
+                            success_count += 1
+                        else:
+                            error_count += 1
+                    except:
+                        error_count += 1
+        
+        # Show summary
+        if success_count > 0:
+            st.success(f"✅ Upload thành công: {success_count} file")
+        if error_count > 0:
+            st.error(f"❌ Upload thất bại: {error_count} file")
+        
+        # Reset file uploader and refresh file list
+        st.session_state.uploader_key += 1
+        time.sleep(0.5)  # Wait for backend to process
+        st.rerun()
     
     st.divider()
     
@@ -286,12 +323,14 @@ with st.sidebar:
             st.rerun()
     with col2:
         if st.button("🗑️ Clear", use_container_width=True):
-            st.session_state.uploaded_files_tracker.clear()
             st.session_state.selected_files.clear()
             st.rerun()
     
     # Get and display files
     files = get_files()
+    
+    # Filter out files being deleted (optimistic UI - hide immediately)
+    files = [f for f in files if f.get("file_id") not in st.session_state.deleting_files]
     
     if files:
         st.markdown("**Chọn file làm nguồn:**")
@@ -330,18 +369,22 @@ with st.sidebar:
                     st.caption(f"✓ {file.get('chunks_count', 0)} chunks | {file.get('total_page', 0)} trang")
                 else:
                     st.text(f"{status_emoji} {filename}")
-                    if status == "failed":
+                    if status == "processing":
+                        st.caption("⏳ Đang xử lý...")
+                    elif status == "uploaded":
+                        st.caption("📤 Đang chờ xử lý...")
+                    elif status == "failed":
                         st.caption(f"❌ {file.get('error', '')[:30]}...")
             
             with col_b:
-                if st.button("🗑️", key=f"del_{file_id}"):
-                    try:
-                        requests.delete(f"{API_URL}/files/{file_id}")
-                        if file_id in st.session_state.selected_files:
-                            st.session_state.selected_files.remove(file_id)
-                        st.rerun()
-                    except:
-                        pass
+                if st.button("×", key=f"del_{file_id}", help="Xóa file", type="secondary"):
+                    # ONLY mark for deletion - NO API call here
+                    st.session_state.deleting_files.add(file_id)
+                    if file_id in st.session_state.selected_files:
+                        st.session_state.selected_files.remove(file_id)
+                    
+                    # Immediate rerun - file disappears instantly
+                    st.rerun()
             
             st.markdown("---")
         

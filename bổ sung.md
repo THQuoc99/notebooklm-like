@@ -32,6 +32,9 @@ Dưới đây là **bản format lại phần yêu cầu bổ sung** theo  **chu
 
 * Cho phép chọn **nhiều file trong một lượt**
 * Các file được upload  **song song** , không upload tuần tự
+* Hiển thị thêm thanh tiến trình upload của các file nữa
+* Nhớ là các file sẽ upload song song-các tiến trình cũng sẽ chạy và cập nhật song song.
+* Khi upload thành công thì nhớ refresh để lấy lại danh sách file
 
 **Yêu cầu kỹ thuật**
 
@@ -50,8 +53,10 @@ Dưới đây là **bản format lại phần yêu cầu bổ sung** theo  **chu
 **Mô tả**
 
 * Khi người dùng yêu cầu xóa file:
-  * UI phản hồi ngay (optimistic UI)
-  * Hệ thống chạy **luồng xóa ngầm (background deletion)**
+  * UI phản hồi ngay (optimistic UI) và xóa ngay và cập nhật lại danh sách file sau khi thực hiện xóa xong.
+  * Hệ thống chạy **luồng xóa ngầm (background deletion) không ảnh hướng đến UI .**
+  * Đổi button xóa thành x nhìn cho lux.
+  * 
 
 **Phạm vi xóa**
 
