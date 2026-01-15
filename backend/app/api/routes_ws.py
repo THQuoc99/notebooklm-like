@@ -76,9 +76,23 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
             # Stream answer with citations
             full_answer = ""
             async for chunk in llm_service.answer_question_stream(question, contexts_with_citations, history):
-                await websocket.send_json(chunk)
                 if chunk["type"] == "token":
                     full_answer += chunk["content"]
+                    await websocket.send_json(chunk)
+                elif chunk["type"] == "done":
+                    # Don't send done yet - we need to send sources first
+                    break
+                else:
+                    await websocket.send_json(chunk)
+            
+            # Send sources BEFORE done so frontend can render tooltips
+            await websocket.send_json({
+                "type": "sources",
+                "content": [s.dict() for s in sources]
+            })
+            
+            # Now send done
+            await websocket.send_json({"type": "done"})
             
             # Save assistant message with sources
             assistant_msg = MessageModel(
@@ -88,18 +102,6 @@ async def websocket_chat(websocket: WebSocket, conversation_id: str):
                 sources=sources
             )
             conversation_service.add_message(conversation_id, assistant_msg)
-            
-            # Send sources detail for hover tooltips
-            await websocket.send_json({
-                "type": "sources",
-                "content": [s.dict() for s in sources]
-            })
-            
-    except WebSocketDisconnect:
-        print(f"Client disconnected from conversation {conversation_id}")
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        await websocket.send_json({"type": "error", "content": str(e)})
             
     except WebSocketDisconnect:
         print(f"Client disconnected from conversation {conversation_id}")

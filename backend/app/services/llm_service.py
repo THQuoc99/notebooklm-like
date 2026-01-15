@@ -47,7 +47,7 @@ class LLMService:
         system_prompt = """Trợ lý AI trả lời dựa trên tài liệu.
 Quy tắc:
 - Chỉ dùng thông tin trong tài liệu
-- Trích dẫn bằng [1], [2], [3]
+- Nhất định phải có Trích dẫn bằng [1], [2], [3]
 - Không biết → nói "Không tìm thấy trong tài liệu"
 - Ngắn gọn, chính xác"""
 

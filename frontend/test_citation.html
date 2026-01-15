@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Citation Hover</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 15px;
+            overflow-x: hidden;
+        }
+        
+        .answer-text {
+            font-size: 16px;
+            line-height: 1.8;
+            color: #333;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .citation {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+            margin: 0 2px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            user-select: none;
+        }
+        
+        .citation:hover {
+            background: #1976d2;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .tooltip {
+            display: none;
+            position: fixed;
+            background-color: #2c3e50;
+            color: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            width: 350px;
+            max-width: 90vw;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 10000;
+            text-align: left;
+            font-weight: normal;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: normal;
+        }
+        
+        .tooltip.show {
+            display: block;
+        }
+        
+        .tooltip::after {
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: #2c3e50 transparent transparent transparent;
+        }
+        
+        .tooltip-header {
+            font-weight: 700;
+            color: #3498db;
+            margin-bottom: 8px;
+            font-size: 14px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 6px;
+        }
+        
+        .tooltip-section {
+            margin: 8px 0;
+        }
+        
+        .tooltip-label {
+            color: #95a5a6;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+        }
+        
+        .tooltip-content {
+            color: #ecf0f1;
+            margin-bottom: 6px;
+            word-wrap: break-word;
+        }
+        
+        .tooltip-excerpt {
+            background: #34495e;
+            padding: 8px;
+            border-radius: 4px;
+            font-style: italic;
+            color: #bdc3c7;
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: 12px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Citation Hover</h1>
+    <p>Hover over the citations below:</p>
+    <div class="answer-text" id="answer"></div>
+    <div class="tooltip" id="tooltip"></div>
+    
+    <script>
+        const sources = [
+            {
+                "filename": "test_file_1.pdf",
+                "page_start": 1,
+                "page_end": 1,
+                "title": "Test Title 1",
+                "content": "This is test content for source 1. It contains some sample text to demonstrate the tooltip functionality."
+            },
+            {
+                "filename": "test_file_2.pdf",
+                "page_start": 2,
+                "page_end": 3,
+                "title": "Test Title 2",
+                "content": "This is test content for source 2. It also contains sample text for demonstration purposes."
+            }
+        ];
+        
+        const answerText = "This is a test answer with citations [1] and [2]. You can hover over them to see the tooltip.";
+        
+        // Escape HTML entities
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Parse citations and create HTML
+        function renderAnswer() {
+            const answerDiv = document.getElementById('answer');
+            const pattern = /\[(\d+)\]/g;
+            let lastIndex = 0;
+            let html = '';
+            
+            let match;
+            while ((match = pattern.exec(answerText)) !== null) {
+                // Add text before citation (escaped)
+                const textBefore = answerText.substring(lastIndex, match.index);
+                html += escapeHtml(textBefore);
+                
+                const num = match[1];
+                const idx = parseInt(num) - 1;
+                
+                if (idx >= 0 && idx < sources.length) {
+                    html += `<span class="citation" data-index="${idx}" data-num="${num}">[${num}]</span>`;
+                } else {
+                    html += escapeHtml(match[0]);
+                }
+                
+                lastIndex = pattern.lastIndex;
+            }
+            
+            // Add remaining text (escaped)
+            html += escapeHtml(answerText.substring(lastIndex));
+            answerDiv.innerHTML = html;
+            
+            console.log('Rendered HTML:', html);
+            
+            // Add event listeners
+            document.querySelectorAll('.citation').forEach(citation => {
+                citation.addEventListener('mouseenter', showTooltip);
+                citation.addEventListener('mouseleave', hideTooltip);
+            });
+        }
+        
+        function showTooltip(e) {
+            const citation = e.target;
+            const idx = parseInt(citation.dataset.index);
+            const num = citation.dataset.num;
+            const source = sources[idx];
+            
+            console.log('Showing tooltip for citation', num, source);
+            
+            if (!source) return;
+            
+            // Escape all source data
+            const filename = escapeHtml(source.filename || 'Unknown');
+            const pageStart = source.page_start || '?';
+            const pageEnd = source.page_end || '?';
+            const title = escapeHtml(source.title || 'N/A');
+            const content = escapeHtml((source.content || 'N/A').substring(0, 200)) + '...';
+            
+            const pageLabel = pageStart === pageEnd 
+                ? `Trang ${pageStart}` 
+                : `Trang ${pageStart}-${pageEnd}`;
+            
+            const tooltip = document.getElementById('tooltip');
+            tooltip.innerHTML = `
+                <div class="tooltip-header">📄 Nguồn [${num}]</div>
+                <div class="tooltip-section">
+                    <div class="tooltip-label">Tên file</div>
+                    <div class="tooltip-content">${filename}</div>
+                </div>
+                <div class="tooltip-section">
+                    <div class="tooltip-label">Số trang</div>
+                    <div class="tooltip-content">${pageLabel}</div>
+                </div>
+                <div class="tooltip-section">
+                    <div class="tooltip-label">Tiêu đề đoạn</div>
+                    <div class="tooltip-content">${title}</div>
+                </div>
+                <div class="tooltip-section">
+                    <div class="tooltip-label">Trích đoạn</div>
+                    <div class="tooltip-excerpt">${content}</div>
+                </div>
+            `;
+            
+            // Position tooltip
+            const rect = citation.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+            
+            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            let top = rect.top - tooltipRect.height - 10;
+            
+            // Keep tooltip in viewport
+            if (left < 10) left = 10;
+            if (left + tooltipRect.width > window.innerWidth - 10) {
+                left = window.innerWidth - tooltipRect.width - 10;
+            }
+            
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+            tooltip.classList.add('show');
+        }
+        
+        function hideTooltip() {
+            const tooltip = document.getElementById('tooltip');
+            tooltip.classList.remove('show');
+        }
+        
+        // Initialize
+        renderAnswer();
+    </script>
+</body>
+</html>
